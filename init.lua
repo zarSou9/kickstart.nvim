@@ -215,6 +215,24 @@ vim.keymap.set('n', '<C-k>', '<C-w><C-k>', { desc = 'Move focus to the upper win
 -- vim.keymap.set("n", "<C-S-j>", "<C-w>J", { desc = "Move window to the lower" })
 -- vim.keymap.set("n", "<C-S-k>", "<C-w>K", { desc = "Move window to the upper" })
 
+-- Move lines up/down with Alt+j/k (supports count, e.g. 5<A-j>)
+vim.keymap.set('n', '<A-j>', function()
+  vim.cmd('m .+' .. vim.v.count1)
+  vim.cmd 'normal! =='
+end, { desc = 'Move line down' })
+vim.keymap.set('n', '<A-k>', function()
+  vim.cmd('m .-' .. (vim.v.count1 + 1))
+  vim.cmd 'normal! =='
+end, { desc = 'Move line up' })
+vim.keymap.set('v', '<A-j>', function()
+  vim.cmd("m '>+" .. vim.v.count1)
+  vim.cmd 'normal! gv=gv'
+end, { desc = 'Move selection down' })
+vim.keymap.set('v', '<A-k>', function()
+  vim.cmd("m '<-" .. (vim.v.count1 + 1))
+  vim.cmd 'normal! gv=gv'
+end, { desc = 'Move selection up' })
+
 -- [[ Basic Autocommands ]]
 --  See `:help lua-guide-autocommands`
 
@@ -772,19 +790,14 @@ require('lazy').setup({
         root_dir = function(bufnr, on_dir)
           local fname = vim.api.nvim_buf_get_name(bufnr)
           -- Don't attach to diffview buffers
-          if fname:match('^diffview://') then
+          if fname:match '^diffview://' then
             return nil
           end
           -- Use default root detection for normal files
-          local root = require('lspconfig.util').root_pattern(
-            'pyrightconfig.json',
-            'pyproject.toml',
-            'setup.py',
-            'setup.cfg',
-            'requirements.txt',
-            'Pipfile',
-            '.git'
-          )(fname)
+          local root =
+            require('lspconfig.util').root_pattern('pyrightconfig.json', 'pyproject.toml', 'setup.py', 'setup.cfg', 'requirements.txt', 'Pipfile', '.git')(
+              fname
+            )
           if root then
             on_dir(root)
           end
@@ -892,7 +905,7 @@ require('lazy').setup({
         -- <c-k>: Toggle signature help
         --
         -- See :h blink-cmp-config-keymap for defining your own keymap
-        preset = 'enter',
+        preset = 'default',
 
         -- For more advanced Luasnip keymaps (e.g. selecting choice nodes, expansion) see:
         --    https://github.com/L3MON4D3/LuaSnip?tab=readme-ov-file#keymaps
