@@ -805,6 +805,22 @@ require('lazy').setup({
           end
         end,
       })
+
+      -- Override ruff root_dir to ignore diffview:// buffers
+      vim.lsp.config('ruff', {
+        root_dir = function(bufnr, on_dir)
+          local fname = vim.api.nvim_buf_get_name(bufnr)
+          -- Don't attach to diffview buffers
+          if fname:match '^diffview://' then
+            return nil
+          end
+          -- Use default root detection for normal files
+          local root = require('lspconfig.util').root_pattern('pyproject.toml', 'ruff.toml', '.ruff.toml', '.git')(fname)
+          if root then
+            on_dir(root)
+          end
+        end,
+      })
     end,
   },
 
