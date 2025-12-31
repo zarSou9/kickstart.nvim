@@ -186,6 +186,49 @@ vim.keymap.set('n', ']d', function()
   vim.diagnostic.jump { count = 1 }
 end, { desc = 'Go to next [D]iagnostic' })
 
+-- Add pyright ignore comment for diagnostics on current line
+vim.keymap.set('n', '<leader>pi', function()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local line = vim.api.nvim_win_get_cursor(0)[1] - 1 -- 0-indexed
+  local diagnostics = vim.diagnostic.get(bufnr, { lnum = line })
+
+  -- Filter for pyright/basedpyright diagnostics and collect unique codes
+  local codes = {}
+  local seen = {}
+  for _, diag in ipairs(diagnostics) do
+    local source = diag.source or ''
+    if (source:lower():find 'pyright' or source:lower():find 'basedpyright') and diag.code then
+      local code = tostring(diag.code)
+      if not seen[code] then
+        seen[code] = true
+        table.insert(codes, code)
+      end
+    end
+  end
+
+  if #codes == 0 then
+    vim.notify('No pyright diagnostics on this line', vim.log.levels.WARN)
+    return
+  end
+
+  -- Build the ignore comment
+  local ignore_comment = '  # pyright: ignore[' .. table.concat(codes, ', ') .. ']'
+
+  -- Get current line and append the comment
+  local current_line = vim.api.nvim_buf_get_lines(bufnr, line, line + 1, false)[1]
+
+  -- Check if there's already a pyright ignore comment
+  if current_line:match '# pyright: ignore' then
+    vim.notify('Line already has a pyright ignore comment', vim.log.levels.WARN)
+    return
+  end
+
+  -- Remove trailing whitespace before adding comment
+  current_line = current_line:gsub('%s*$', '')
+  vim.api.nvim_buf_set_lines(bufnr, line, line + 1, false, { current_line .. ignore_comment })
+  vim.notify('Added: # pyright: ignore[' .. table.concat(codes, ', ') .. ']', vim.log.levels.INFO)
+end, { desc = '[P]yright [I]gnore - add ignore comment for diagnostics' })
+
 -- Exit terminal mode in the builtin terminal with a shortcut that is a bit easier
 -- for people to discover. Otherwise, you normally need to press <C-\><C-n>, which
 -- is not what someone will guess without a bit more experience.
@@ -265,6 +308,17 @@ vim.api.nvim_create_autocmd('FileChangedShellPost', {
   group = vim.api.nvim_create_augroup('auto-reload-notify', { clear = true }),
   callback = function()
     vim.notify('File changed on disk. Buffer reloaded.', vim.log.levels.WARN)
+  end,
+})
+
+-- Set 2-space indentation for markdown files
+vim.api.nvim_create_autocmd('FileType', {
+  pattern = 'markdown',
+  callback = function()
+    vim.bo.shiftwidth = 2
+    vim.bo.tabstop = 2
+    vim.bo.softtabstop = 2
+    vim.bo.expandtab = true
   end,
 })
 
@@ -769,6 +823,7 @@ require('lazy').setup({
       vim.list_extend(ensure_installed, {
         'stylua', -- Used to format Lua code
         'ruff', -- Python linter and formatter
+        'prettier', -- Used to format markdown, js, etc
       })
       require('mason-tool-installer').setup { ensure_installed = ensure_installed }
 
@@ -857,6 +912,7 @@ require('lazy').setup({
       formatters_by_ft = {
         lua = { 'stylua' },
         python = { 'ruff_fix', 'ruff_format' },
+        markdown = { 'prettier' },
         -- Conform can also run multiple formatters sequentially
         --
         -- You can use 'stop_after_first' to run the first available formatter from the list
