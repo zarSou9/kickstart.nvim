@@ -169,6 +169,12 @@ vim.o.confirm = true
 -- Automatically read files when changed outside of Neovim
 vim.o.autoread = true
 
+-- Treesitter-based folding
+vim.o.foldmethod = 'expr'
+vim.o.foldexpr = 'v:lua.vim.treesitter.foldexpr()'
+vim.o.foldlevel = 99
+vim.o.foldlevelstart = 99
+
 -- [[ Basic Keymaps ]]
 --  See `:help vim.keymap.set()`
 
@@ -186,8 +192,29 @@ vim.keymap.set('n', ']d', function()
   vim.diagnostic.jump { count = 1 }
 end, { desc = 'Go to next [D]iagnostic' })
 
+-- Quickfix navigation (for iterating through grep results, etc.)
+vim.keymap.set('n', ']q', '<cmd>cnext<CR>zz', { desc = 'Next [Q]uickfix item' })
+vim.keymap.set('n', '[q', '<cmd>cprev<CR>zz', { desc = 'Previous [Q]uickfix item' })
+vim.keymap.set('n', ']Q', '<cmd>clast<CR>zz', { desc = 'Last [Q]uickfix item' })
+vim.keymap.set('n', '[Q', '<cmd>cfirst<CR>zz', { desc = 'First [Q]uickfix item' })
+
+-- Toggle inline diagnostics
+local show_diagnostics = true
+vim.keymap.set('n', '<leader>td', function()
+  show_diagnostics = not show_diagnostics
+  vim.diagnostic.config { virtual_text = show_diagnostics }
+  vim.notify('Diagnostics ' .. (show_diagnostics and 'shown' or 'hidden'), vim.log.levels.INFO)
+end, { desc = '[T]oggle [D]iagnostics' })
+
+-- Copy file reference for Claude Code
+vim.keymap.set('n', '<leader>cc', function()
+  local path = vim.fn.fnamemodify(vim.fn.expand '%', ':.')
+  vim.fn.setreg('+', '@' .. path)
+  vim.notify('Copied: @' .. path)
+end, { desc = '[C]laude [C]opy file reference' })
+
 -- Add pyright ignore comment for diagnostics on current line
-vim.keymap.set('n', '<leader>pi', function()
+vim.keymap.set('n', '<leader>ii', function()
   local bufnr = vim.api.nvim_get_current_buf()
   local line = vim.api.nvim_win_get_cursor(0)[1] - 1 -- 0-indexed
   local diagnostics = vim.diagnostic.get(bufnr, { lnum = line })
@@ -227,7 +254,7 @@ vim.keymap.set('n', '<leader>pi', function()
   current_line = current_line:gsub('%s*$', '')
   vim.api.nvim_buf_set_lines(bufnr, line, line + 1, false, { current_line .. ignore_comment })
   vim.notify('Added: # pyright: ignore[' .. table.concat(codes, ', ') .. ']', vim.log.levels.INFO)
-end, { desc = '[P]yright [I]gnore - add ignore comment for diagnostics' })
+end, { desc = '[I]nsert [I]gnore - add pyright ignore comment for diagnostics' })
 
 -- Exit terminal mode in the builtin terminal with a shortcut that is a bit easier
 -- for people to discover. Otherwise, you normally need to press <C-\><C-n>, which
@@ -275,6 +302,28 @@ vim.keymap.set('v', '<A-k>', function()
   vim.cmd("m '<-" .. (vim.v.count1 + 1))
   vim.cmd 'normal! gv=gv'
 end, { desc = 'Move selection up' })
+
+-- Override gx to open local files in nvim, URLs in browser
+vim.keymap.set('n', 'gx', function()
+  local cfile = vim.fn.expand '<cfile>'
+  -- Check if it's a URL
+  if cfile:match '^https?://' or cfile:match '^www%.' then
+    vim.ui.open(cfile)
+  else
+    -- Try to resolve as a file path relative to current buffer's directory
+    local bufdir = vim.fn.expand '%:p:h'
+    local filepath = vim.fn.resolve(bufdir .. '/' .. cfile)
+    if vim.fn.filereadable(filepath) == 1 then
+      vim.cmd('edit ' .. vim.fn.fnameescape(filepath))
+    elseif vim.fn.filereadable(cfile) == 1 then
+      -- Try absolute or cwd-relative path
+      vim.cmd('edit ' .. vim.fn.fnameescape(cfile))
+    else
+      -- Fall back to system handler
+      vim.ui.open(cfile)
+    end
+  end
+end, { desc = 'Open file or URL under cursor' })
 
 -- [[ Basic Autocommands ]]
 --  See `:help lua-guide-autocommands`
@@ -451,6 +500,7 @@ require('lazy').setup({
         { '<leader>t', group = '[T]oggle' },
         { '<leader>g', group = '[G]it' },
         { '<leader>h', group = 'Git [H]unk', mode = { 'n', 'v' } },
+        { '<leader>d', group = '[D]ebug' },
       },
     },
   },
@@ -508,15 +558,26 @@ require('lazy').setup({
       -- [[ Configure Telescope ]]
       -- See `:help telescope` and `:help telescope.setup()`
       require('telescope').setup {
-        -- You can put your default mappings / updates / etc. in here
-        --  All the info you're looking for is in `:help telescope.setup()`
-        --
-        -- defaults = {
-        --   mappings = {
-        --     i = { ['<c-enter>'] = 'to_fuzzy_refine' },
-        --   },
-        -- },
-        -- pickers = {}
+        defaults = {
+          -- Exclude common junk directories from all pickers
+          file_ignore_patterns = {
+            '%.git/',
+            'node_modules/',
+            '%.venv/',
+            '__pycache__/',
+            '%.pyc$',
+            '%.pyo$',
+            '%.egg%-info/',
+            'dist/',
+            'build/',
+            '%.cache/',
+          },
+          mappings = {
+            i = {
+              ['<c-enter>'] = 'to_fuzzy_refine',
+            },
+          },
+        },
         extensions = {
           ['ui-select'] = {
             require('telescope.themes').get_dropdown(),
@@ -533,9 +594,28 @@ require('lazy').setup({
       vim.keymap.set('n', '<leader>sh', builtin.help_tags, { desc = '[S]earch [H]elp' })
       vim.keymap.set('n', '<leader>sk', builtin.keymaps, { desc = '[S]earch [K]eymaps' })
       vim.keymap.set('n', '<leader>sf', builtin.find_files, { desc = '[S]earch [F]iles' })
+      vim.keymap.set('n', '<leader>sF', function()
+        builtin.find_files { hidden = true, no_ignore = true }
+      end, { desc = '[S]earch [F]iles (hidden + ignored)' })
       vim.keymap.set('n', '<leader>ss', builtin.builtin, { desc = '[S]earch [S]elect Telescope' })
       vim.keymap.set('n', '<leader>sw', builtin.grep_string, { desc = '[S]earch current [W]ord' })
       vim.keymap.set('n', '<leader>sg', builtin.live_grep, { desc = '[S]earch by [G]rep' })
+      vim.keymap.set('n', '<leader>sG', function()
+        builtin.find_files {
+          find_command = { 'fd', '--type', 'd', '--hidden', '--exclude', '.git' },
+          prompt_title = 'Select Directory to Grep',
+          attach_mappings = function(_, map)
+            map('i', '<CR>', function(prompt_bufnr)
+              local selection = require('telescope.actions.state').get_selected_entry()
+              require('telescope.actions').close(prompt_bufnr)
+              if selection then
+                builtin.live_grep { search_dirs = { selection.value } }
+              end
+            end)
+            return true
+          end,
+        }
+      end, { desc = '[S]earch by [G]rep in directory' })
       vim.keymap.set('n', '<leader>sd', builtin.diagnostics, { desc = '[S]earch [D]iagnostics' })
       vim.keymap.set('n', '<leader>sr', builtin.resume, { desc = '[S]earch [R]esume' })
       vim.keymap.set('n', '<leader>s.', builtin.oldfiles, { desc = '[S]earch Recent Files ("." for repeat)' })
@@ -659,7 +739,7 @@ require('lazy').setup({
           -- Jump to the definition of the word under your cursor.
           --  This is where a variable was first declared, or where a function is defined, etc.
           --  To jump back, press <C-t>.
-          map('grd', require('telescope.builtin').lsp_definitions, '[G]oto [D]efinition')
+          map('grd', vim.lsp.buf.definition, '[G]oto [D]efinition')
 
           -- WARN: This is not Goto Definition, this is Goto Declaration.
           --  For example, in C this would take you to the header.
@@ -725,9 +805,52 @@ require('lazy').setup({
           --
           -- This may be unwanted, since they displace some of your code
           if client and client_supports_method(client, vim.lsp.protocol.Methods.textDocument_inlayHint, event.buf) then
+            -- Enable inlay hints by default (shows return types only initially)
+            vim.lsp.inlay_hint.enable(true, { bufnr = event.buf })
+
             map('<leader>th', function()
               vim.lsp.inlay_hint.enable(not vim.lsp.inlay_hint.is_enabled { bufnr = event.buf })
             end, '[T]oggle Inlay [H]ints')
+
+            map('<leader>ih', function()
+              local bufnr = vim.api.nvim_get_current_buf()
+              local cursor = vim.api.nvim_win_get_cursor(0)
+              local row, col = cursor[1] - 1, cursor[2]
+
+              local hints = vim.lsp.inlay_hint.get {
+                bufnr = bufnr,
+                range = {
+                  start = { line = row, character = 0 },
+                  ['end'] = { line = row, character = 1000 },
+                },
+              }
+
+              if #hints == 0 then
+                vim.notify('No inlay hints on this line', vim.log.levels.WARN)
+                return
+              end
+
+              -- Find the nearest hint to cursor
+              local nearest = hints[1]
+              local nearest_dist = math.abs(nearest.inlay_hint.position.character - col)
+
+              for i = 2, #hints do
+                local dist = math.abs(hints[i].inlay_hint.position.character - col)
+                if dist < nearest_dist then
+                  nearest = hints[i]
+                  nearest_dist = dist
+                end
+              end
+
+              -- Extract the label text
+              local label = nearest.inlay_hint.label
+              local text = type(label) == 'string' and label
+                or table.concat(vim.tbl_map(function(part) return part.value end, label))
+
+              -- Insert at the hint's position with a leading space
+              local pos = nearest.inlay_hint.position
+              vim.api.nvim_buf_set_text(bufnr, pos.line, pos.character, pos.line, pos.character, { ' ' .. text })
+            end, '[I]nsert Inlay [H]int')
           end
         end,
       })
@@ -859,6 +982,19 @@ require('lazy').setup({
             on_dir(root)
           end
         end,
+        settings = {
+          basedpyright = {
+            analysis = {
+              inlayHints = {
+                functionReturnTypes = true,
+                variableTypes = false,
+                callArgumentNames = false,
+                pytestParameters = false,
+                genericTypes = false,
+              },
+            },
+          },
+        },
       })
 
       -- Override ruff root_dir to ignore diffview:// buffers
@@ -1126,7 +1262,7 @@ require('lazy').setup({
   --  Here are some example plugins that I've included in the Kickstart repository.
   --  Uncomment any of the lines below to enable them (you will need to restart nvim).
   --
-  -- require 'kickstart.plugins.debug',
+  require 'kickstart.plugins.debug',
   -- require 'kickstart.plugins.indent_line',
   -- require 'kickstart.plugins.lint',
   -- require 'kickstart.plugins.autopairs',

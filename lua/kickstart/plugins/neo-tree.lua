@@ -11,13 +11,33 @@ return {
   },
   lazy = false,
   keys = {
-    { '\\', ':Neotree reveal<CR>', desc = 'NeoTree reveal', silent = true },
+    { '\\', ':Neotree toggle reveal<CR>', desc = 'NeoTree toggle', silent = true },
   },
   opts = {
+    event_handlers = {
+      {
+        event = 'file_opened',
+        handler = function()
+          vim.cmd 'Neotree close'
+        end,
+      },
+    },
     filesystem = {
       window = {
         mappings = {
           ['\\'] = 'close_window',
+          ['Y'] = function(state)
+            local node = state.tree:get_node()
+            local relative_path = vim.fn.fnamemodify(node.path, ':.')
+            vim.fn.setreg('+', relative_path)
+            vim.notify('Copied: ' .. relative_path)
+          end,
+          ['O'] = function(state)
+            local node = state.tree:get_node()
+            if node.type ~= 'directory' then
+              vim.fn.system({ 'open', node.path })
+            end
+          end,
         },
       },
     },
