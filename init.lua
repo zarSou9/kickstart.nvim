@@ -206,12 +206,12 @@ vim.keymap.set('n', '<leader>td', function()
   vim.notify('Diagnostics ' .. (show_diagnostics and 'shown' or 'hidden'), vim.log.levels.INFO)
 end, { desc = '[T]oggle [D]iagnostics' })
 
--- Copy file reference for Claude Code
-vim.keymap.set('n', '<leader>cc', function()
+-- Copy relative file path to clipboard
+vim.keymap.set('n', '<leader>cp', function()
   local path = vim.fn.fnamemodify(vim.fn.expand '%', ':.')
-  vim.fn.setreg('+', '@' .. path)
-  vim.notify('Copied: @' .. path)
-end, { desc = '[C]laude [C]opy file reference' })
+  vim.fn.setreg('+', path)
+  vim.notify('Copied: ' .. path)
+end, { desc = '[C]opy file [P]ath' })
 
 -- Add pyright ignore comment for diagnostics on current line
 vim.keymap.set('n', '<leader>ii', function()
@@ -501,6 +501,7 @@ require('lazy').setup({
         { '<leader>g', group = '[G]it' },
         { '<leader>h', group = 'Git [H]unk', mode = { 'n', 'v' } },
         { '<leader>d', group = '[D]ebug' },
+        { '<leader>r', group = '[R]efactor', mode = { 'n', 'x' } },
       },
     },
   },
@@ -1274,7 +1275,7 @@ require('lazy').setup({
   --    This is the easiest way to modularize your config.
   --
   --  Uncomment the following line and add your plugins to `lua/custom/plugins/*.lua` to get going.
-  -- { import = 'custom.plugins' },
+  { import = 'custom.plugins' },
   --
   -- For additional information with loading, sourcing and examples see `:help lazy.nvim-🔌-plugin-spec`
   -- Or use telescope!

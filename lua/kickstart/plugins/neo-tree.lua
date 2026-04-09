@@ -32,6 +32,12 @@ return {
             vim.fn.setreg('+', relative_path)
             vim.notify('Copied: ' .. relative_path)
           end,
+          ['gY'] = function(state)
+            local node = state.tree:get_node()
+            local filename = vim.fn.fnamemodify(node.path, ':t')
+            vim.fn.setreg('+', filename)
+            vim.notify('Copied: ' .. filename)
+          end,
           ['O'] = function(state)
             local node = state.tree:get_node()
             if node.type ~= 'directory' then
