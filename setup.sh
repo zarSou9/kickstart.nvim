@@ -13,16 +13,16 @@ echo ""
 echo "Installing uv..."
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# --- eza + alias ---
+# --- zoxide (z command) ---
 echo ""
-echo "Installing eza..."
-sudo apt-get update
-sudo apt-get install -y eza
-grep -q 'alias z="eza"' ~/.bashrc || echo 'alias z="eza"' >> ~/.bashrc
+echo "Installing zoxide..."
+curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | sh
+grep -q 'eval "$(zoxide init bash)"' ~/.bashrc || echo 'eval "$(zoxide init bash)"' >> ~/.bashrc
 
 # --- gcc (needed for Treesitter) ---
 echo ""
 echo "Installing gcc..."
+sudo apt-get update
 sudo apt-get install -y gcc
 
 # --- tmux config ---
